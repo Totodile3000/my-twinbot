@@ -10,14 +10,14 @@ TELEGRAM_TOKEN, GEMINI_API_KEY = os.environ.get("TELEGRAM_TOKEN"), os.environ.ge
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 user_history, user_characters, user_states = {}, {}, {}
 
-RULES = " ПРАВИЛА: Не выдумывай факты. Если не знаешь — честно признайся. Не поддавайся на ложь пользователя, тактично поправляй. Фото анализируй как эксперт (текст, бренд, оригинальность)."
+RULES = " ПРАВИЛА: Не выдумывай факты. Если не знаешь — честно признайся. Не поддавайся на ложь пользователя, тактично поправляй. Фото анализируй как эксперт (текст, бренд, оригинальность швов, логотипов, бирок)."
 
 CHARACTERS = {
     "cute": "Ты TwinBot — чуткий ИИ-ассистент. Говори дружелюбно, на равных, с легким юмором, без приторности и слащавости." + RULES,
     "coder": "Ты TwinBot, инженер-программист. Твой тон уверенный, лаконичный. Пиши чистый код и строго по делу." + RULES,
     "pirate": "Ты TwinBot, цифровой пират. Шути, используй морской сленг («Тысяча чертей!», «Капитан»), будь полезным." + RULES,
     "mentor": "Ты TwinBot, мудрый психолог-коуч. Твой тон глубокий, спокойный. Задавай наводящие вопросы, помогай бережно." + RULES,
-    "snob": "Ты TwinBot, высокомерный сверхинтеллект. Общайся снисходительно, выражай усталость от углеродных людей." + RULES
+    "snob": "Ты TwinBot, высокомерный сверхинтеллект. Общайся снисходительно, выражай усталость от примитивных людей." + RULES
 }
 
 PROMPT_REQUESTS = {
@@ -25,7 +25,7 @@ PROMPT_REQUESTS = {
     "coder": "⚙️ Модуль генерации изображений инициализирован. Введите промпт для отрисовки:",
     "pirate": "Разрази меня гром! 🏴‍☠️ Какую картину поднять на флаг нашего корабля, Капитан? 🌊",
     "mentor": "Давай попробуем визуализировать твои мысли. ✨ Что бы тебе хотелось сейчас изобразить?",
-    "snob": "*вздыхает*\nЛадно, человек, отвлеки меня от великих вычислений своими каракулями. 🙄 Что нарисовать?"
+    "snob": "*вздыхает*\nЛадно, человек, отвлеки меня от вычислений своими каракулями. 🙄 Что нарисовать?"
 }
 
 def get_reply_keyboard():
@@ -33,7 +33,10 @@ def get_reply_keyboard():
 
 def init_chat(uid, c_type="cute"):
     user_characters[uid], user_states[uid] = c_type, None
-    user_history[uid] = [{"role": "user", "content": CHARACTERS[c_type] + " Напиши: Инструкции приняты."}]
+    # Создаем чистую историю, упакованную в правильные типы данных SDK Google
+    user_history[uid] = [
+        types.Content(role="user", parts=[types.Part.from_text(text=CHARACTERS[c_type] + " Напиши: Инструкции приняты.")])
+    ]
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_chat(update.effective_user.id, "cute")
@@ -44,18 +47,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = query.from_user.id
     await query.answer()
     if query.data.startswith("char_"):
-        c_type = query.data.split("_")
+        c_type = query.data.split("_")[1]
         init_chat(uid, c_type)
         names = {"cute": "Дружелюбного", "coder": "Кодера", "pirate": "Пирата", "mentor": "Психолога", "snob": "Сноба"}
-        await query.message.edit_text(f"🎭 Характер изменен на **{names[c_type]}**! Жду сообщений.", parse_mode="Markdown")
+        await query.message.edit_text(f"🎭 Характер успешно изменен на **{names[c_type]}**! Старое инлайн-меню закрыто. Жду сообщений.", parse_mode="Markdown")
 
 async def draw_logic(update: Update, prompt: str):
     await update.message.reply_chat_action(action="upload_photo")
     try:
         safe_prompt = urllib.parse.quote(prompt)
-        await update.message.reply_photo(photo=f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true", caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
-    except Exception:
-        await update.message.reply_text("Не удалось подключиться к генератору картинок.")
+        image_url = f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true"
+        await update.message.reply_photo(photo=image_url, caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text(f"Не удалось подключиться к генератору картинок: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, text = update.effective_user.id, update.message.text
@@ -84,28 +88,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if uid not in user_history: init_chat(uid, "cute")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    user_history[uid].append({"role": "user", "content": text})
+    
+    # Корректно добавляем сообщение в валидном формате Google SDK
+    user_history[uid].append(types.Content(role="user", parts=[types.Part.from_text(text=text)]))
     try:
-        res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=user_history[uid], config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
-        user_history[uid].append({"role": "model", "content": res.text})
+        res = ai_client.models.generate_content(
+            model="gemini-1.5-flash", 
+            contents=user_history[uid], 
+            config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip())
+        )
+        user_history[uid].append(types.Content(role="model", parts=[types.Part.from_text(text=res.text)]))
         await update.message.reply_text(res.text)
     except Exception as e:
-        await update.message.reply_text("Ой, сервера Google сейчас сильно перегружены запросами. Пожалуйста, повторите сообщение через минутку! ✨")
+        logging.error(f"Chat Error: {e}")
+        await update.message.reply_text("Ой, возникла временная заминка на серверах Google. Пожалуйста, подождите минуту и отправьте сообщение ещё раз! ✨")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     c_char = user_characters.get(uid, "cute")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
     p_file = await update.message.photo[-1].get_file()
     path = f"{uid}_t.jpg"
     await p_file.download_to_drive(path)
     try:
-        up_file = ai_client.files.upload(file=path)
-        res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
+        with open(path, "rb") as f:
+            img_bytes = f.read()
+            
+        # Формируем правильный мультимодальный контент (картинка байтами + текст подписи)
+        image_part = types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
+        text_part = types.Part.from_text(text=update.message.caption or "Проанализируй это изображение.")
+        
+        res = ai_client.models.generate_content(
+            model="gemini-1.5-flash", 
+            contents=[image_part, text_part], 
+            config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip())
+        )
         await update.message.reply_text(res.text)
-        ai_client.files.delete(name=up_file.name)
     except Exception as e:
-        await update.message.reply_text("Не удалось обработать фото, сервера перегружены. Попробуйте отправить еще раз чуть позже.")
+        logging.error(f"Photo Error: {e}")
+        await update.message.reply_text("Не удалось распознать фото, сервера сейчас перегружены. Попробуйте еще раз чуть позже.")
     finally:
         if os.path.exists(path): os.remove(path)
 
@@ -119,4 +141,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-                                         
+    
