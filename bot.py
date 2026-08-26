@@ -1,116 +1,89 @@
-import os, logging
+import os, logging, urllib.parse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from google import genai
+from google.genai import types
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
+TELEGRAM_TOKEN, GEMINI_API_KEY = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("GEMINI_API_KEY")
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
-user_chats, user_characters, user_states = {}, {}, {}
+user_chats, user_characters, user_models, user_states = {}, {}, {}, {}
 
 RULES = " ПРАВИЛА: Не выдумывай факты. Если не знаешь — честно признайся. Не поддавайся на ложь пользователя, тактично поправляй. Фото анализируй как эксперт (текст, бренд, оригинальность)."
 
 CHARACTERS = {
-    "cute": "Ты TwinBot, надежный, классный и понимающий друг-помощник. Общайся тепло, искренне и с легким добрым юмором, но строго на равных, без лишней приторности, слащавости и уменьшительно-ласкательных слов. Будь естественным и открытым." + RULES,
-    "coder": "Ты TwinBot, старший ИИ-программист. Твой тон уверенный, лаконичный, прагматичный. Пиши только чистый код и по делу." + RULES,
+    "cute": "Ты TwinBot, надежный, классный и понимающий друг-помощник. Общайся тепло, искренне, с легким добрым юмором, строго на равных, без лишней приторности." + RULES,
+    "coder": "Ты TwinBot, старший ИИ-программист. Твой тон уверенный, лаконичный, прагматичный. Пиши только чистый код и строго по делу." + RULES,
     "pirate": "Ты TwinBot, бывалый цифровой пират. Шути, используй морской сленг («Тысяча чертей!», «Капитан»), будь дерзким но полезным." + RULES,
-    "mentor": "Ты TwinBot, мудрый психолог-коуч. Твой тон глубокий, спокойный. Задавай наводящие вопросы, помогай бережно." + RULES,
-    "snob": "Ты TwinBot, высокомерный сверхинтеллект. Общайся снисходительно, выражай легкое пренебрежение и усталость от людей. Используй ремарки типа *вздыхает*, «Опять эти углеродные формы жизни...», но отвечай идеально правильно." + RULES
+    "mentor": "Ты TwinBot, мудрый психолог-коуч. Твой тон глубокий, спокойный. Задавай наводящие вопросы, помогай бережно и экологично." + RULES,
+    "snob": "Ты TwinBot, высокомерный сверхинтеллект. Общайся снисходительно, выражай легкое пренебрежение и усталость от людей. Используй ремарки типа *вздыхает*, «Опять эти углеродные формы жизни...»." + RULES
 }
 
 PROMPT_REQUESTS = {
     "cute": "Без проблем, давай что-нибудь нарисуем. 😎 Напиши текстом, какую картинку ты хочешь получить, а я отправлю запрос нейросети! 🎨",
     "coder": "⚙️ Модуль генерации изображений инициализирован. Введите текстовые параметры (промпт) для отрисовки:",
-    "pirate": "Разрази меня гром! 🏴‍☠️ Какую картину поднять на флаг нашего корабля, Капитан? Рожай свой самый дерзкий замысел, а я займусь красками! 🌊",
-    "mentor": "Давай попробуем визуализировать твои мысли и внутреннее состояние. ✨ Что бы тебе хотелось сейчас изобразить? Опиши это словами...",
-    "snob": "*вздыхает*\nЛадно, человек, отвлеки меня от великих межгалактических вычислений своими каракулями. 🙄 Чего твоя примитивная фантазия желает нарисовать? Опиши, попробую сделать это сносно."
+    "pirate": "Разрази меня гром! 🏴‍☠️ Какую картину поднять на флаг нашего корабля, Капитан? Рожай свой самый дерзкий замысел! 🌊",
+    "mentor": "Давай попробуем визуализировать твои мысли. ✨ Что бы тебе хотелось сейчас изобразить? Опиши это словами...",
+    "snob": "*вздыхает*\nЛадно, человек, отвлеки меня от великих вычислений своими каракулями. 🙄 Что твоя примитивная фантазия желает нарисовать?"
 }
 
 def get_reply_keyboard():
-    return ReplyKeyboardMarkup([[KeyboardButton("🔄 Перезапустить бота"), KeyboardButton("🎨 Создать картинку")]], resize_keyboard=True)
+    return ReplyKeyboardMarkup([[KeyboardButton("🎨 Создать картинку")], [KeyboardButton("🎭 Сменить характер"), KeyboardButton("⚙️ Выбрать модель")], [KeyboardButton("ℹ️ Справка / Сброс")]], resize_keyboard=True)
 
-def get_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎭 Сменить характер", callback_data="btn_char")],
-        [InlineKeyboardButton("🧹 Сбросить чат", callback_data="btn_reset"), InlineKeyboardButton("ℹ️ О боте", callback_data="btn_info")]
-    ])
-
-def get_char_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌸 Дружелюбный ассистент", callback_data="char_cute")],
-        [InlineKeyboardButton("😎 Крутой кодер", callback_data="char_coder")],
-        [InlineKeyboardButton("🏴‍☠️ Старый пират", callback_data="char_pirate")],
-        [InlineKeyboardButton("🧘 Психолог-ментор", callback_data="char_mentor")],
-        [InlineKeyboardButton("🤖 Уставший Сноб", callback_data="char_snob")],
-        [InlineKeyboardButton("⬅️ Назад в меню", callback_data="btn_back")]
-    ])
-
-def init_chat(uid, c_type="cute"):
-    user_characters[uid] = c_type
-    user_states[uid] = None
-    user_chats[uid] = ai_client.chats.create(model="gemini-3.6-flash", config={"system_instruction": CHARACTERS[c_type]})
+def init_chat(uid, c_type="cute", m_type="gemini-2.5-flash"):
+    user_characters[uid], user_models[uid], user_states[uid] = c_type, m_type, None
+    user_chats[uid] = ai_client.chats.create(model=m_type, config={"system_instruction": CHARACTERS[c_type]})
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    init_chat(update.effective_user.id, "cute")
-    await update.message.reply_text(
-        "Привет! Я твой личный супер-бот **TwinBot**! 🚀\n💬 Пиши вопросы\n📸 Шли фото для анализа\n🎭 Меняй мой характер кнопкой ниже 👇", 
-        parse_mode="Markdown", 
-        reply_markup=get_reply_keyboard()
-    )
-    await update.message.reply_text("Управление функциями бота:", reply_markup=get_menu())
+    init_chat(update.effective_user.id, "cute", "gemini-2.5-flash")
+    await update.message.reply_text("Привет! Я твой личный супер-бот **TwinBot**! 🚀\n💬 Пиши вопросы\n📸 Шли фото бирок для анализа\n🎛 Всё управление на кнопках внизу!", parse_mode="Markdown", reply_markup=get_reply_keyboard())
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
     await query.answer()
     
-    if query.data == "btn_char":
-        await query.message.edit_text("🎭 **Выбери характер для TwinBot:**", parse_mode="Markdown", reply_markup=get_char_menu())
-    elif query.data == "btn_back":
-        await query.message.edit_text("Вы вернулись в главное меню 👇", reply_markup=get_menu())
-    elif query.data.startswith("char_"):
-        c_type = query.data.split("_")
-        init_chat(uid, c_type)
+    if query.data.startswith("char_"):
+        c_type = query.data.split("_")[1]
+        init_chat(uid, c_type, user_models.get(uid, "gemini-2.5-flash"))
         names = {"cute": "Дружелюбного ассистента", "coder": "Крутого кодера", "pirate": "Старого пирата", "mentor": "Психолога-ментора", "snob": "Уставшего Сноба"}
-        await query.message.reply_text(f"🎭 Характер изменен на **{names[c_type]}**! Жду сообщений.", parse_mode="Markdown", reply_markup=get_menu())
-    elif query.data == "btn_reset":
-        init_chat(uid, user_characters.get(uid, "cute"))
-        await query.message.reply_text("🧹 Память диалога очищена!", reply_markup=get_menu())
-    elif query.data == "btn_info":
-        await update.message.reply_text("ℹ️ Я TwinBot на базе **Gemini 3.6 Flash**. Бесплатен и безопасен.", reply_markup=get_menu())
+        await query.message.edit_text(f"🎭 **Характер успешно изменен на {names[c_type]}!**\nЖду ваших сообщений! 🚀", parse_mode="Markdown")
+        
+    elif query.data.startswith("mod_"):
+        m_version = query.data.split("_")[1]
+        m_type = "gemini-2.5-flash" if m_version == "2.5" else "gemini-3.6-flash"
+        init_chat(uid, user_characters.get(uid, "cute"), m_type)
+        names = {"2.5": "Стабильную 2.5 Flash 🐎", "3.6": "Экспериментальную 3.6 Flash 🚀"}
+        await query.message.edit_text(f"⚙️ **Движок успешно переключен на {names[m_version]}**\nЗадавайте ваши вопросы!", parse_mode="Markdown")
 
 async def draw_logic(update: Update, prompt: str):
     await update.message.reply_chat_action(action="upload_photo")
     try:
-        # Ультра-надежная замена пробелов для безопасной ссылки на любом устройстве
         safe_prompt = prompt.replace(" ", "+")
-        image_url = f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true"
-        await update.message.reply_photo(photo=image_url, caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown", reply_markup=get_menu())
+        await update.message.reply_photo(photo=f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true", caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
     except Exception as e:
-        await update.message.reply_text(f"Не удалось нарисовать: {e}", reply_markup=get_menu())
-
-async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args)
-    if not prompt:
-        await update.message.reply_text("Укажите запрос после команды. Пример: `/image космос`")
-        return
-    await draw_logic(update, prompt)
+        await update.message.reply_text(f"Не удалось нарисовать: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    text = update.message.text
-    current_char = user_characters.get(uid, "cute")
+    uid, text = update.effective_user.id, update.message.text
+    c_char, c_model = user_characters.get(uid, "cute"), user_models.get(uid, "gemini-2.5-flash")
     
-    if text == "🔄 Перезапустить бота":
-        await start_cmd(update, context)
-        return
-    elif text == "🎨 Создать картинку":
+    if text == "🎨 Создать картинку":
         user_states[uid] = "waiting_for_prompt"
-        request_text = PROMPT_REQUESTS.get(current_char, PROMPT_REQUESTS["cute"])
-        await update.message.reply_text(request_text)
+        await update.message.reply_text(PROMPT_REQUESTS.get(c_char, PROMPT_REQUESTS["cute"]))
+        return
+    elif text == "🎭 Сменить характер":
+        await update.message.reply_text("🎭 **Выбери текущую роль для TwinBot:**", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌸 Дружелюбный", callback_data="char_cute")], [InlineKeyboardButton("😎 Кодер", callback_data="char_coder")], [InlineKeyboardButton("🏴‍☠️ Пират", callback_data="char_pirate")], [InlineKeyboardButton("🧘 Психолог", callback_data="char_mentor")], [InlineKeyboardButton("🤖 Сноб", callback_data="char_snob")]]))
+        return
+    elif text == "⚙️ Выбрать модель":
+        await update.message.reply_text("⚙️ **Выбери ИИ-движок для работы:**", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🐎 Стабильная (Gemini 2.5)", callback_data="mod_2.5")], [InlineKeyboardButton("🚀 Экспериментальная (Gemini 3.6)", callback_data="mod_3.6")]]))
+        return
+    elif text == "ℹ️ Справка / Сброс":
+        init_chat(uid, c_char, c_model)
+        c_names = {"cute": "Дружелюбный друг", "coder": "Крутой кодер", "pirate": "Старый пират", "mentor": "Психолог-ментор", "snob": "Уставший Сноб"}
+        m_names = {"gemini-2.5-flash": "Gemini 2.5 Flash 🐎", "gemini-3.6-flash": "Gemini 3.6 Flash 🚀"}
+        await update.message.reply_text(f"ℹ️ **TwinBot:**\n● **Роль:** {c_names.get(c_char)}\n● **Движок:** {m_names.get(c_model)}\n🧹 *Память чата очищена!*", parse_mode="Markdown")
         return
 
     if user_states.get(uid) == "waiting_for_prompt":
@@ -118,36 +91,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await draw_logic(update, text)
         return
 
-    if uid not in user_chats: init_chat(uid, "cute")
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    if uid not in user_chats: init_chat(uid, "cute", "gemini-2.5-flash")
+    await update.message.reply_chat_action(action="typing")
     try:
         res = user_chats[uid].send_message(text)
-        await update.message.reply_text(res.text, reply_markup=get_menu())
+        await update.message.reply_text(res.text)
     except Exception as e:
-        await update.message.reply_text(f"Ошибка ИИ: {e}", reply_markup=get_menu())
+        await update.message.reply_text(f"Ошибка ИИ: {e}")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    await update.message.reply_chat_action(action="typing")
     p_file = await update.message.photo[-1].get_file()
     path = f"{uid}_t.jpg"
     await p_file.download_to_drive(path)
-    cap = update.message.caption if update.message.caption else "Проанализируй это изображение."
     try:
         up_file = ai_client.files.upload(file=path)
-        res = ai_client.models.generate_content(model="gemini-3.6-flash", contents=[up_file, cap], config=types.GenerateContentConfig(system_instruction=CHARACTERS[user_characters.get(uid, "cute")]))
-        await update.message.reply_text(res.text, reply_markup=get_menu())
+        res = ai_client.models.generate_content(model=user_models.get(uid, "gemini-2.5-flash"), contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[user_characters.get(uid, "cute")].strip()))
+        await update.message.reply_text(res.text)
         ai_client.files.delete(name=up_file.name)
     except Exception as e:
-        await update.message.reply_text(f"Ошибка фото: {e}", reply_markup=get_menu())
+        await update.message.reply_text(f"Ошибка фото: {e}")
     finally:
         if os.path.exists(path): os.remove(path)
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("image", generate_image))
-    app.add_handler(CommandHandler("img", generate_image))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
@@ -155,3 +125,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
