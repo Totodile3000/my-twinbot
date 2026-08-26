@@ -190,36 +190,13 @@ async def generate_with_gemini(contents, character: str):
 
         except Exception as error:
             last_error = error
-            logger.exception(
-                "Gemini error, attempt %s/%s",
-                attempt,
-                MAX_RETRIES
-            )
-
-            error_text = str(error).lower()
-
-            # При 429 ждём дольше, чтобы не усугублять лимит
-            if any(x in error_text for x in [
-                "429",
-                "resource_exhausted",
-                "rate limit",
-                "too many requests"
-            ]):
-                if attempt < MAX_RETRIES:
-                    wait_time = attempt * 10
-                    logger.warning(
-                        "Gemini rate limit. Waiting %s seconds before retry.",
-                        wait_time
-                    )
-                    await asyncio.sleep(wait_time)
-                continue
+            logger.exception("Gemini error, attempt %s/%s", attempt, MAX_RETRIES)
 
             if not is_retryable_error(error):
                 break
 
             if attempt < MAX_RETRIES:
-                wait_time = attempt * 3
-                await asyncio.sleep(wait_time)
+                await asyncio.sleep(attempt * 2)
 
     raise last_error
 
@@ -332,7 +309,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "ℹ️ Параметры TwinBot:\n\n"
             f"● Роль: {CHARACTER_NAMES.get(character)}\n"
-            f"● Модель Gemini: {GEMINI_MODEL}\n"
+            f"● Gemini: {GEMINI_MODEL}\n"
             "● Анализ изображений: Gemini\n"
             "● Генерация изображений: Pollinations AI"
         )
@@ -519,4 +496,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
