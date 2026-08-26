@@ -60,14 +60,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def draw_logic(update: Update, prompt: str):
     await update.message.reply_chat_action(action="upload_photo")
     try:
-        safe_prompt = prompt.replace(" ", "+")
-        await update.message.reply_photo(photo=f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true", caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
+        # Надежное кодирование кириллицы и спецсимволов для URL
+        safe_prompt = urllib.parse.quote(prompt)
+        image_url = f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true"
+        await update.message.reply_photo(photo=image_url, caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
     except Exception as e:
         await update.message.reply_text(f"Не удалось нарисовать: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid, text = update.effective_user.id, update.message.text
-    c_char, c_model = user_characters.get(uid, "cute"), user_models.get(uid, "gemini-2.5-flash")
+    uid = update.effective_user.id
+    text = update.message.text
+    c_char = user_characters.get(uid, "cute")
+    c_model = user_models.get(uid, "gemini-2.5-flash")
     
     if text == "🎨 Создать картинку":
         user_states[uid] = "waiting_for_prompt"
@@ -125,4 +129,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
