@@ -309,7 +309,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "ℹ️ Параметры TwinBot:\n\n"
             f"● Роль: {CHARACTER_NAMES.get(character)}\n"
-            f"● Gemini: {GEMINI_MODEL}\n"
+            f"● Модель Gemini: {GEMINI_MODEL}\n"
             "● Анализ изображений: Gemini\n"
             "● Генерация изображений: Pollinations AI"
         )
