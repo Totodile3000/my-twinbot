@@ -19,81 +19,37 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
 from google import genai
 from google.genai import types
 
-
-# ============================================================
-# CONFIG
-# ============================================================
-
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Можно изменить прямо в Render → Environment
-GEMINI_MODEL = os.getenv(
-    "GEMINI_MODEL",
-    "gemini-2.5-flash",
-)
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 MAX_HISTORY_MESSAGES = 20
 MAX_MESSAGE_LENGTH = 12000
 MAX_RETRIES = 3
 
-
-# ============================================================
-# LOGGING
-# ============================================================
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-
 logger = logging.getLogger("TwinBot")
 
-
-# ============================================================
-# CHECK ENVIRONMENT
-# ============================================================
-
 if not TELEGRAM_TOKEN:
-    raise RuntimeError(
-        "TELEGRAM_TOKEN не найден."
-    )
+    raise RuntimeError("TELEGRAM_TOKEN не найден.")
 
 if not GEMINI_API_KEY:
-    raise RuntimeError(
-        "GEMINI_API_KEY не найден."
-    )
+    raise RuntimeError("GEMINI_API_KEY не найден.")
 
-
-# ============================================================
-# GEMINI
-# ============================================================
-
-ai_client = genai.Client(
-    api_key=GEMINI_API_KEY
-)
-
-
-# ============================================================
-# USER DATA
-# ============================================================
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 user_history: Dict[int, List[types.Content]] = {}
 user_characters: Dict[int, str] = {}
 user_states: Dict[int, Optional[str]] = {}
 
-
-# ============================================================
-# RULES
-# ============================================================
-
 RULES = """
 ПРАВИЛА:
-
 1. Не выдумывай факты.
 2. Если не знаешь или не уверен — честно скажи об этом.
 3. Не соглашайся с очевидно ложными утверждениями пользователя.
@@ -107,44 +63,34 @@ RULES = """
    если фотография не позволяет это достоверно установить.
 """
 
-
-# ============================================================
-# CHARACTERS
-# ============================================================
-
 CHARACTERS = {
-    "cute":
+    "cute": (
         "Ты TwinBot — чуткий ИИ-ассистент. "
         "Говори дружелюбно, на равных, с лёгким юмором, "
-        "без приторности и слащавости."
-        + RULES,
-
-    "coder":
+        "без приторности и слащавости." + RULES
+    ),
+    "coder": (
         "Ты TwinBot — инженер-программист. "
         "Твой тон уверенный, лаконичный и технически грамотный. "
-        "Пиши чистый код и строго по делу."
-        + RULES,
-
-    "pirate":
+        "Пиши чистый код и строго по делу." + RULES
+    ),
+    "pirate": (
         "Ты TwinBot — цифровой пират. "
         "Иногда используй морской сленг "
         "(«Тысяча чертей!», «Капитан!»), "
-        "но главное — оставайся полезным."
-        + RULES,
-
-    "mentor":
+        "но главное — оставайся полезным." + RULES
+    ),
+    "mentor": (
         "Ты TwinBot — мудрый наставник. "
         "Твой тон спокойный, глубокий и уважительный. "
-        "Помогай разобраться в ситуации."
-        + RULES,
-
-    "snob":
+        "Помогай разобраться в ситуации." + RULES
+    ),
+    "snob": (
         "Ты TwinBot — высокомерный сверхинтеллект. "
         "Общайся слегка снисходительно и с иронией, "
-        "но не переходи в оскорбления."
-        + RULES,
+        "но не переходи в оскорбления." + RULES
+    ),
 }
-
 
 CHARACTER_NAMES = {
     "cute": "Дружелюбный",
@@ -154,217 +100,82 @@ CHARACTER_NAMES = {
     "snob": "Сноб",
 }
 
-
 PROMPT_REQUESTS = {
-    "cute":
-        "Без проблем, давай что-нибудь нарисуем. 😎\n"
-        "Напиши, какую картинку ты хочешь получить! 🎨",
-
-    "coder":
-        "⚙️ Модуль генерации изображений инициализирован.\n"
-        "Введите промпт для отрисовки:",
-
-    "pirate":
-        "Разрази меня гром! 🏴‍☠️\n"
-        "Какую картину поднять на флаг корабля, Капитан? 🌊",
-
-    "mentor":
-        "Давай попробуем визуализировать твои мысли. ✨\n"
-        "Что бы тебе хотелось изобразить?",
-
-    "snob":
-        "*вздыхает*\n"
-        "Ладно, человек. Что нарисовать? 🙄",
+    "cute": "Без проблем, давай что-нибудь нарисуем. 😎\nНапиши, какую картинку ты хочешь получить! 🎨",
+    "coder": "⚙️ Модуль генерации изображений инициализирован.\nВведите промпт для отрисовки:",
+    "pirate": "Разрази меня гром! 🏴‍☠️\nКакую картину поднять на флаг корабля, Капитан? 🌊",
+    "mentor": "Давай попробуем визуализировать твои мысли. ✨\nЧто бы тебе хотелось изобразить?",
+    "snob": "*вздыхает*\nЛадно, человек. Что нарисовать? 🙄",
 }
-
-
-# ============================================================
-# KEYBOARDS
-# ============================================================
 
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton("🎨 Создать картинку")],
             [KeyboardButton("🎭 Сменить характер")],
-            [
-                KeyboardButton("ℹ️ О боте"),
-                KeyboardButton("🧹 Сбросить чат"),
-            ],
+            [KeyboardButton("ℹ️ О боте"), KeyboardButton("🧹 Сбросить чат")],
         ],
         resize_keyboard=True,
     )
 
-
 def character_keyboard():
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "🌸 Дружелюбный",
-                    callback_data="char_cute",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "😎 Кодер",
-                    callback_data="char_coder",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🏴‍☠️ Пират",
-                    callback_data="char_pirate",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🧘 Наставник",
-                    callback_data="char_mentor",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🤖 Сноб",
-                    callback_data="char_snob",
-                )
-            ],
-        ]
-    )
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌸 Дружелюбный", callback_data="char_cute")],
+        [InlineKeyboardButton("😎 Кодер", callback_data="char_coder")],
+        [InlineKeyboardButton("🏴‍☠️ Пират", callback_data="char_pirate")],
+        [InlineKeyboardButton("🧘 Наставник", callback_data="char_mentor")],
+        [InlineKeyboardButton("🤖 Сноб", callback_data="char_snob")],
+    ])
 
-
-# ============================================================
-# CHAT INIT
-# ============================================================
-
-def init_chat(
-    uid: int,
-    character: str = "cute",
-):
+def init_chat(uid: int, character: str = "cute"):
     if character not in CHARACTERS:
         character = "cute"
-
     user_characters[uid] = character
     user_states[uid] = None
     user_history[uid] = []
 
-
 def trim_history(uid: int):
     history = user_history.get(uid)
-
     if history and len(history) > MAX_HISTORY_MESSAGES:
         user_history[uid] = history[-MAX_HISTORY_MESSAGES:]
 
-
-# ============================================================
-# GEMINI ERROR HANDLING
-# ============================================================
-
 def is_retryable_error(error: Exception) -> bool:
     text = str(error).lower()
+    return any(x in text for x in [
+        "429", "resource_exhausted", "rate limit", "too many requests",
+        "500", "502", "503", "504", "internal server",
+        "service unavailable", "timeout", "deadline exceeded",
+    ])
 
-    return any(
-        x in text
-        for x in [
-            "429",
-            "resource_exhausted",
-            "rate limit",
-            "too many requests",
-            "500",
-            "502",
-            "503",
-            "504",
-            "internal server",
-            "service unavailable",
-            "timeout",
-            "deadline exceeded",
-        ]
-    )
-
-
-def friendly_gemini_error(
-    error: Exception,
-) -> str:
-
+def friendly_gemini_error(error: Exception) -> str:
     text = str(error).lower()
 
-    if (
-        "429" in text
-        or "resource_exhausted" in text
-        or "rate limit" in text
-        or "too many requests" in text
-    ):
-        return (
-            "⏳ Gemini временно ограничил количество запросов.\n"
-            "Попробуйте ещё раз через некоторое время."
-        )
+    if any(x in text for x in ["429", "resource_exhausted", "rate limit", "too many requests"]):
+        return "⏳ Gemini временно ограничил количество запросов.\nПопробуйте ещё раз через некоторое время."
 
     if "403" in text or "permission" in text:
-        return (
-            "🔑 Gemini отклонил запрос.\n"
-            "Проверьте GEMINI_API_KEY и доступ к API."
-        )
+        return "🔑 Gemini отклонил запрос.\nПроверьте GEMINI_API_KEY и доступ к API."
 
     if "404" in text or "not found" in text:
-        return (
-            "❌ Модель Gemini недоступна.\n\n"
-            f"Сейчас указана модель: {GEMINI_MODEL}\n\n"
-            "Проверьте название модели в переменных Render."
-        )
+        return f"❌ Модель Gemini недоступна.\nСейчас указана модель: {GEMINI_MODEL}\nПроверьте название модели в переменных Render."
 
     if "400" in text or "invalid argument" in text:
-        return (
-            "⚠️ Gemini получил некорректный запрос.\n"
-            "Подробности есть в логах Render."
-        )
+        return "⚠️ Gemini получил некорректный запрос.\nПодробности есть в логах Render."
 
-    if any(
-        x in text
-        for x in [
-            "500",
-            "502",
-            "503",
-            "504",
-            "internal server",
-            "service unavailable",
-        ]
-    ):
-        return (
-            "☁️ Gemini временно не отвечает.\n"
-            "Попробуйте ещё раз через несколько секунд."
-        )
+    if any(x in text for x in ["500", "502", "503", "504", "internal server", "service unavailable"]):
+        return "☁️ Gemini временно не отвечает.\nПопробуйте ещё раз через несколько секунд."
 
-    return (
-        "⚠️ Gemini не смог обработать запрос.\n"
-        "Попробуйте ещё раз."
-    )
+    return "⚠️ Gemini не смог обработать запрос.\nПопробуйте ещё раз."
 
-
-# ============================================================
-# GEMINI REQUEST
-# ============================================================
-
-async def generate_with_gemini(
-    contents,
-    character: str,
-):
-
+async def generate_with_gemini(contents, character: str):
     config = types.GenerateContentConfig(
-        system_instruction=CHARACTERS.get(
-            character,
-            CHARACTERS["cute"],
-        ).strip()
+        system_instruction=CHARACTERS.get(character, CHARACTERS["cute"]).strip()
     )
 
     last_error = None
 
-    for attempt in range(
-        1,
-        MAX_RETRIES + 1,
-    ):
-
+    for attempt in range(1, MAX_RETRIES + 1):
         try:
-
             result = await asyncio.to_thread(
                 ai_client.models.generate_content,
                 model=GEMINI_MODEL,
@@ -373,48 +184,25 @@ async def generate_with_gemini(
             )
 
             if not result or not result.text:
-                raise RuntimeError(
-                    "Gemini вернул пустой ответ."
-                )
+                raise RuntimeError("Gemini вернул пустой ответ.")
 
             return result.text.strip()
 
         except Exception as error:
-
             last_error = error
-
-            logger.exception(
-                "Gemini error, attempt %s/%s",
-                attempt,
-                MAX_RETRIES,
-            )
+            logger.exception("Gemini error, attempt %s/%s", attempt, MAX_RETRIES)
 
             if not is_retryable_error(error):
                 break
 
             if attempt < MAX_RETRIES:
-                await asyncio.sleep(
-                    attempt * 2
-                )
+                await asyncio.sleep(attempt * 2)
 
     raise last_error
 
-
-# ============================================================
-# START
-# ============================================================
-
-async def start_cmd(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-
-    init_chat(
-        uid,
-        "cute",
-    )
+    init_chat(uid, "cute")
 
     await update.message.reply_text(
         "Привет! Я твой личный супер-бот TwinBot! 🚀\n\n"
@@ -426,45 +214,18 @@ async def start_cmd(
         reply_markup=main_keyboard(),
     )
 
-
-# ============================================================
-# RESET
-# ============================================================
-
-async def reset_cmd(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
+async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-
-    character = user_characters.get(
-        uid,
-        "cute",
-    )
-
-    init_chat(
-        uid,
-        character,
-    )
+    character = user_characters.get(uid, "cute")
+    init_chat(uid, character)
 
     await update.message.reply_text(
         "🧹 Память текущего диалога очищена.",
         reply_markup=main_keyboard(),
     )
 
-
-# ============================================================
-# CHARACTER BUTTON
-# ============================================================
-
-async def button_handler(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-
     await query.answer()
 
     uid = query.from_user.id
@@ -472,169 +233,79 @@ async def button_handler(
     if not query.data.startswith("char_"):
         return
 
-    character = query.data.replace(
-        "char_",
-        "",
-        1,
-    )
+    character = query.data.replace("char_", "", 1)
 
     if character not in CHARACTERS:
         return
 
-    init_chat(
-        uid,
-        character,
-    )
+    init_chat(uid, character)
 
     await query.message.edit_text(
-        "🎭 Характер изменён на "
-        f"**{CHARACTER_NAMES[character]}**!\n\n"
+        f"🎭 Характер изменён на **{CHARACTER_NAMES[character]}**!\n\n"
         "Старая история диалога очищена.",
         parse_mode="Markdown",
     )
 
-
-# ============================================================
-# IMAGE GENERATION
-# ============================================================
-
-async def draw_logic(
-    update: Update,
-    prompt: str,
-):
-
+async def draw_logic(update: Update, prompt: str):
     prompt = prompt.strip()
 
     if not prompt:
-        await update.message.reply_text(
-            "Напиши, что именно нужно нарисовать."
-        )
+        await update.message.reply_text("Напиши, что именно нужно нарисовать.")
         return
 
-    await contextless_chat_action(
-        update,
-        "upload_photo",
-    )
-
     try:
+        await update.effective_chat.send_action(action="upload_photo")
 
-        encoded = urllib.parse.quote(
-            prompt,
-            safe="",
-        )
+        encoded = urllib.parse.quote(prompt, safe="")
 
         image_url = (
             "https://image.pollinations.ai/prompt/"
             f"{encoded}"
-            "?width=1024"
-            "&height=1024"
-            "&nologo=true"
+            "?width=1024&height=1024&nologo=true"
         )
 
         await update.message.reply_photo(
             photo=image_url,
-            caption=(
-                "🎨 Готово!\n"
-                f"Запрос: {prompt}"
-            ),
+            caption=f"🎨 Готово!\nЗапрос: {prompt}",
         )
 
     except Exception:
-
-        logger.exception(
-            "Image generation error"
-        )
-
+        logger.exception("Image generation error")
         await update.message.reply_text(
             "🎨 Не удалось создать изображение.\n"
             "Генератор временно не отвечает."
         )
 
-
-async def contextless_chat_action(
-    update: Update,
-    action: str,
-):
-
-    try:
-        await update.effective_chat.send_action(
-            action=action
-        )
-    except Exception:
-        pass
-
-
-# ============================================================
-# TEXT
-# ============================================================
-
-async def handle_message(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    if not update.message:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
         return
 
-    text = update.message.text
-
-    if not text:
-        return
-
-    text = text.strip()
-
+    text = update.message.text.strip()
     if not text:
         return
 
     uid = update.effective_user.id
 
     if uid not in user_characters:
-        init_chat(
-            uid,
-            "cute",
-        )
+        init_chat(uid, "cute")
 
-    character = user_characters.get(
-        uid,
-        "cute",
-    )
-
-    # --------------------------------------------------------
-    # DRAW
-    # --------------------------------------------------------
+    character = user_characters.get(uid, "cute")
 
     if text == "🎨 Создать картинку":
-
         user_states[uid] = "waiting_for_prompt"
-
         await update.message.reply_text(
-            PROMPT_REQUESTS.get(
-                character,
-                PROMPT_REQUESTS["cute"],
-            )
+            PROMPT_REQUESTS.get(character, PROMPT_REQUESTS["cute"])
         )
-
         return
 
-    # --------------------------------------------------------
-    # CHARACTER
-    # --------------------------------------------------------
-
     if text == "🎭 Сменить характер":
-
         await update.message.reply_text(
             "🎭 Выбери роль для TwinBot:",
             reply_markup=character_keyboard(),
         )
-
         return
 
-    # --------------------------------------------------------
-    # ABOUT
-    # --------------------------------------------------------
-
     if text == "ℹ️ О боте":
-
         await update.message.reply_text(
             "ℹ️ Параметры TwinBot:\n\n"
             f"● Роль: {CHARACTER_NAMES.get(character)}\n"
@@ -642,91 +313,41 @@ async def handle_message(
             "● Анализ изображений: Gemini\n"
             "● Генерация изображений: Pollinations AI"
         )
-
         return
-
-    # --------------------------------------------------------
-    # RESET
-    # --------------------------------------------------------
 
     if text == "🧹 Сбросить чат":
-
-        init_chat(
-            uid,
-            character,
-        )
-
-        await update.message.reply_text(
-            "🧹 Память текущего диалога очищена."
-        )
-
+        init_chat(uid, character)
+        await update.message.reply_text("🧹 Память текущего диалога очищена.")
         return
-
-    # --------------------------------------------------------
-    # IMAGE PROMPT
-    # --------------------------------------------------------
 
     if user_states.get(uid) == "waiting_for_prompt":
-
         user_states[uid] = None
-
-        await draw_logic(
-            update,
-            text,
-        )
-
+        await draw_logic(update, text)
         return
-
-    # --------------------------------------------------------
-    # LENGTH
-    # --------------------------------------------------------
 
     if len(text) > MAX_MESSAGE_LENGTH:
-
         await update.message.reply_text(
-            f"Сообщение слишком длинное.\n"
-            f"Максимум: {MAX_MESSAGE_LENGTH} символов."
+            f"Сообщение слишком длинное.\nМаксимум: {MAX_MESSAGE_LENGTH} символов."
         )
-
         return
-
-    # --------------------------------------------------------
-    # TYPING
-    # --------------------------------------------------------
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action="typing",
     )
 
-    # --------------------------------------------------------
-    # HISTORY
-    # --------------------------------------------------------
-
-    user_history.setdefault(
-        uid,
-        [],
-    )
+    user_history.setdefault(uid, [])
 
     user_history[uid].append(
         types.Content(
             role="user",
-            parts=[
-                types.Part.from_text(
-                    text=text
-                )
-            ],
+            parts=[types.Part.from_text(text=text)],
         )
     )
 
     trim_history(uid)
 
-    # --------------------------------------------------------
-    # GEMINI
-    # --------------------------------------------------------
-
     try:
-
         answer = await generate_with_gemini(
             user_history[uid],
             character,
@@ -735,29 +356,17 @@ async def handle_message(
         user_history[uid].append(
             types.Content(
                 role="model",
-                parts=[
-                    types.Part.from_text(
-                        text=answer
-                    )
-                ],
+                parts=[types.Part.from_text(text=answer)],
             )
         )
 
         trim_history(uid)
 
-        await update.message.reply_text(
-            answer
-        )
+        await update.message.reply_text(answer)
 
     except Exception as error:
+        logger.exception("Chat Error for user %s", uid)
 
-        logger.exception(
-            "Chat Error for user %s",
-            uid,
-        )
-
-        # Не оставляем неудачный запрос
-        # в истории.
         if user_history.get(uid):
             user_history[uid].pop()
 
@@ -765,31 +374,16 @@ async def handle_message(
             friendly_gemini_error(error)
         )
 
-
-# ============================================================
-# PHOTO
-# ============================================================
-
-async def handle_photo(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
     uid = update.effective_user.id
 
     if uid not in user_characters:
-        init_chat(
-            uid,
-            "cute",
-        )
+        init_chat(uid, "cute")
 
-    character = user_characters.get(
-        uid,
-        "cute",
-    )
+    character = user_characters.get(uid, "cute")
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
@@ -799,25 +393,14 @@ async def handle_photo(
     file_path = None
 
     try:
-
         photo = update.message.photo[-1]
-
         telegram_file = await photo.get_file()
 
-        file_path = (
-            f"/tmp/twinbot_{uid}_"
-            f"{photo.file_unique_id}.jpg"
-        )
+        file_path = f"/tmp/twinbot_{uid}_{photo.file_unique_id}.jpg"
 
-        await telegram_file.download_to_drive(
-            file_path
-        )
+        await telegram_file.download_to_drive(file_path)
 
-        with open(
-            file_path,
-            "rb",
-        ) as file:
-
+        with open(file_path, "rb") as file:
             image_bytes = file.read()
 
         caption = (
@@ -826,9 +409,7 @@ async def handle_photo(
         )
 
         if len(caption) > MAX_MESSAGE_LENGTH:
-            caption = caption[
-                :MAX_MESSAGE_LENGTH
-            ]
+            caption = caption[:MAX_MESSAGE_LENGTH]
 
         image_part = types.Part.from_bytes(
             data=image_bytes,
@@ -842,10 +423,7 @@ async def handle_photo(
         contents = [
             types.Content(
                 role="user",
-                parts=[
-                    image_part,
-                    text_part,
-                ],
+                parts=[image_part, text_part],
             )
         ]
 
@@ -854,36 +432,68 @@ async def handle_photo(
             character,
         )
 
-        await update.message.reply_text(
-            answer
-        )
+        await update.message.reply_text(answer)
 
     except Exception as error:
-
-        logger.exception(
-            "Photo Error for user %s",
-            uid,
-        )
+        logger.exception("Photo Error for user %s", uid)
 
         await update.message.reply_text(
             friendly_gemini_error(error)
         )
 
     finally:
-
-        if file_path and os.path.exists(
-            file_path
-        ):
-
+        if file_path and os.path.exists(file_path):
             try:
                 os.remove(file_path)
-
             except Exception:
-
                 logger.exception(
                     "Could not remove %s",
                     file_path,
                 )
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(
+        "Telegram error: %s",
+        context.error,
+        exc_info=context.error,
+    )
 
-# ===========================================
+def main():
+    logger.info("Starting TwinBot...")
+    logger.info("Gemini model: %s", GEMINI_MODEL)
+
+    app = (
+        Application.builder()
+        .token(TELEGRAM_TOKEN)
+        .build()
+    )
+
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("reset", reset_cmd))
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    app.add_handler(
+        MessageHandler(
+            filters.PHOTO,
+            handle_photo,
+        )
+    )
+
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_message,
+        )
+    )
+
+    app.add_error_handler(error_handler)
+
+    logger.info("TwinBot started successfully.")
+
+    app.run_polling(
+        drop_pending_updates=True
+    )
+
+if __name__ == "__main__":
+    main()
+    
