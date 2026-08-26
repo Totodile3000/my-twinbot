@@ -14,18 +14,18 @@ user_chats = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_chats[user_id] = ai_client.chats.create(model="gemini-2.5-flash")
+    user_chats[user_id] = ai_client.chats.create(model="gemini-3.6-flash")
     await update.message.reply_text("Привет! Я твой личный ИИ-ассистент Gemini. Задавай вопросы!")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_text = update.message.text
     if user_id not in user_chats:
-        user_chats[user_id] = ai_client.chats.create(model="gemini-2.5-flash")
+        user_chats[user_id] = ai_client.chats.create(model="gemini-3.6-flash")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
         response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=user_text,
         )
         await update.message.reply_text(response.text)
