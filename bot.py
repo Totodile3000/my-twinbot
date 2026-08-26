@@ -41,8 +41,11 @@ def get_reply_keyboard():
 
 def init_chat(uid, c_type="cute"):
     user_characters[uid], user_states[uid] = c_type, None
-    # ИСПРАВЛЕНО: Согласно новым стандартам Google GenAI SDK 2026 года
-    user_chats[uid] = ai_client.chats.create_chat(model="gemini-1.5-flash", config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_type]))
+    # ИСПРАВЛЕНО: ПРАВИЛЬНЫЙ вызов создания чата в новой библиотеке Google GenAI SDK
+    user_chats[uid] = ai_client.chats.create(
+        model="gemini-1.5-flash", 
+        config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_type])
+    )
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_chat(update.effective_user.id, "cute")
@@ -97,7 +100,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uid not in user_chats: init_chat(uid, "cute")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
-        # ИСПРАВЛЕНО: Новый метод отправки реплик в чат-сессию
         res = user_chats[uid].send_message(text)
         await update.message.reply_text(res.text)
     except Exception as e:
@@ -116,7 +118,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await p_file.download_to_drive(path)
     try:
         up_file = ai_client.files.upload(file=path)
-        # ИСПРАВЛЕНО: Корректный вызов мультимодального анализа
         res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
         await update.message.reply_text(res.text)
         ai_client.files.delete(name=up_file.name)
