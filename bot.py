@@ -190,13 +190,36 @@ async def generate_with_gemini(contents, character: str):
 
         except Exception as error:
             last_error = error
-            logger.exception("Gemini error, attempt %s/%s", attempt, MAX_RETRIES)
+            logger.exception(
+                "Gemini error, attempt %s/%s",
+                attempt,
+                MAX_RETRIES
+            )
+
+            error_text = str(error).lower()
+
+            # При 429 ждём дольше, чтобы не усугублять лимит
+            if any(x in error_text for x in [
+                "429",
+                "resource_exhausted",
+                "rate limit",
+                "too many requests"
+            ]):
+                if attempt < MAX_RETRIES:
+                    wait_time = attempt * 10
+                    logger.warning(
+                        "Gemini rate limit. Waiting %s seconds before retry.",
+                        wait_time
+                    )
+                    await asyncio.sleep(wait_time)
+                continue
 
             if not is_retryable_error(error):
                 break
 
             if attempt < MAX_RETRIES:
-                await asyncio.sleep(attempt * 2)
+                wait_time = attempt * 3
+                await asyncio.sleep(wait_time)
 
     raise last_error
 
