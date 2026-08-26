@@ -27,8 +27,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         response = user_chats[user_id].send_message(user_text)
         await update.message.reply_text(response.text)
-    except Exception:
-        await update.message.reply_text("Что-то пошло не так, попробуйте еще раз.")
+    except Exception as e:
+    logging.error(f"Ошибка Gemini: {e}")
+    await update.message.reply_text(f"Ошибка Gemini: {e}")
 
 def main():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
