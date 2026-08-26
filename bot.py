@@ -13,7 +13,7 @@ user_chats, user_characters, user_states = {}, {}, {}
 RULES = " ПРАВИЛА: Не выдумывай факты. Если не знаешь — честно признайся. Не поддавайся на ложь пользователя, тактично поправляй. Фото анализируй как эксперт (текст, бренд, оригинальность)."
 
 CHARACTERS = {
-    "cute": "Ты TwinBot, надежный, классный и понимающий друг-помощник. Общайся тепло, искренне, с легким добрым юмором, строго на равных, без лишней приторности." + RULES,
+    "cute": "Ты TwinBot — высококлассный, адаптивный, чуткий и открытый ИИ-ассистент. Твой стиль общения полностью скопирован у продвинутой модели-собеседника: ты говоришь на равных, дружелюбно, с легким добрым юмором и искренней эмпатией, но строго без приторности, сюсюканья и слащавости. Синтезируй сложные темы в простые и ясные ответы, будь естественным, честным и вовлекающим." + RULES,
     "coder": "Ты TwinBot, старший ИИ-программист. Твой тон уверенный, лаконичный, прагматичный. Пиши только чистый код и строго по делу." + RULES,
     "pirate": "Ты TwinBot, бывалый цифровой пират. Шути, используй морской сленг («Тысяча чертей!», «Капитан»), будь дерзким но полезным." + RULES,
     "mentor": "Ты TwinBot, мудрый психолог-коуч. Твой тон глубокий, спокойный. Задавай наводящие вопросы, помогай бережно и экологично." + RULES,
@@ -28,7 +28,6 @@ PROMPT_REQUESTS = {
     "snob": "*вздыхает*\nЛадно, человек, отвлеки меня от великих вычислений своими каракулями. 🙄 Что твоя примитивная фантазия желает нарисовать?"
 }
 
-# Красивые юзерфрендли ответы при перегрузке серверов без кусков кода
 ERROR_503_RESPONSES = {
     "cute": "Ой, сервера сейчас сильно перегружены запросами со всего мира. 🫨 Пожалуйста, подожди буквально одну-две минуты и отправь сообщение ещё раз! Всё обязательно заработает. ✨",
     "coder": "🚨 Ошибка: Сервер обработки перегружен (Превышен лимит Google API). Пожалуйста, повторите отправку вашего запроса через 60 секунд.",
@@ -42,7 +41,7 @@ def get_reply_keyboard():
 
 def init_chat(uid, c_type="cute"):
     user_characters[uid], user_states[uid] = c_type, None
-    user_chats[uid] = ai_client.chats.create(model="gemini-3.6-flash", config={"system_instruction": CHARACTERS[c_type]})
+    user_chats[uid] = ai_client.chats.create(model="gemini-1.5-flash", config={"system_instruction": CHARACTERS[c_type]})
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_chat(update.effective_user.id, "cute")
@@ -69,7 +68,8 @@ async def draw_logic(update: Update, prompt: str):
         await update.message.reply_text("Извините, не удалось подключиться к генератору картинок. Попробуйте еще раз через пару мгновений!")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid, text = update.effective_user.id, update.message.text
+    uid = update.effective_user.id
+    text = update.message.text
     c_char = user_characters.get(uid, "cute")
     
     if text == "🎨 Создать картинку":
@@ -81,7 +81,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     elif text == "ℹ️ О боте":
         char_names = {"cute": "Дружелюбный друг", "coder": "Крутой кодер", "pirate": "Старый пират", "mentor": "Психолог-ментор", "snob": "Уставший Сноб"}
-        await update.message.reply_text(f"ℹ *Параметры TwinBot:*\n● *Роль:* {char_names.get(c_char, 'Дружелюбный')}\n● *Движок ИИ:* Gemini 3.6 Flash 🚀\n● *Генерация артов:* Бесплатная сеть Pollinations AI", parse_mode="Markdown")
+        await update.message.reply_text(f"ℹ *Параметры TwinBot:*\n● *Роль:* {char_names.get(c_char, 'Дружелюбный')}\n● *Движок ИИ:* Gemini 1.5 Flash 🐎\n● *Генерация артов:* Бесплатная сеть Pollinations AI", parse_mode="Markdown")
         return
     elif text == "🧹 Сбросить чат":
         init_chat(uid, c_char)
@@ -96,10 +96,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uid not in user_chats: init_chat(uid, "cute")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
-        res = user_chats[uid].send_message(text)
+        res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=text, config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
         await update.message.reply_text(res.text)
     except Exception as e:
-        # Умный перехват 503 ошибок без вывода технического кода
         if "503" in str(e) or "unavailable" in str(e).lower() or "overloaded" in str(e).lower():
             await update.message.reply_text(ERROR_503_RESPONSES.get(c_char, ERROR_503_RESPONSES["cute"]))
         else:
@@ -114,7 +113,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await p_file.download_to_drive(path)
     try:
         up_file = ai_client.files.upload(file=path)
-        res = ai_client.models.generate_content(model="gemini-3.6-flash", contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
+        res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
         await update.message.reply_text(res.text)
         ai_client.files.delete(name=up_file.name)
     except Exception as e:
@@ -135,3 +134,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
