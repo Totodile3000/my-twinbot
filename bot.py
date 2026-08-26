@@ -39,7 +39,6 @@ def query_qwen_vision(messages):
     api_url = "https://huggingface.co"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    # Форматируем переписку со специальными тегами для зрения
     formatted_prompt = ""
     for msg in messages:
         formatted_prompt += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
@@ -49,10 +48,10 @@ def query_qwen_vision(messages):
     try:
         response = requests.post(api_url, headers=headers, json=payload, timeout=30)
         result = response.json()
-        if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
-            text = result[0]["generated_text"]
+        if isinstance(result, list) and len(result) > 0 and "generated_text" in result:
+            text = result["generated_text"]
             if "assistant\n" in text:
-                text = text.split("assistant\n")[-1].split("<|im_end|>")[0]
+                text = text.split("assistant\n")[-1].split("<|im_end|>")
             return text.strip()
     except Exception as e:
         logging.error(f"HF Error: {e}")
@@ -93,6 +92,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     elif text == "ℹ️ О боте":
         char_names = {"cute": "Дружелюбный", "coder": "Крутой кодер", "pirate": "Старый пират", "mentor": "Психолог", "snob": "Уставший Сноб"}
+        # ТЕПЕРЬ ТУТ ЧЕСТНО УКАЗАН ОТЛИЧНЫЙ ДВИЖОК QWEN
         await update.message.reply_text(f"ℹ *Параметры TwinBot:*\n● *Роль:* {char_names.get(c_char)}\n● *Движок ИИ:* Мультимодальный Qwen2-VL 👁\n● *Генерация артов:* Сеть Pollinations AI", parse_mode="Markdown")
         return
     elif text == "🧹 Сбросить чат":
@@ -124,11 +124,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     caption = update.message.caption or "Проанализируй это изображение, определи товар и проверь на оригинальность при необходимости."
     try:
-        # Кодируем фото в Base64 для передачи текстом в Hugging Face
         with open(path, "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
         
-        # Передаем картинку в виде специального интернет-тега данных
         image_content = f" ИЗОБРАЖЕНИЕ (Данные Base64): data:image/jpeg;base64,{base64_image}\n\nЗАПРОС ПОЛЬЗОВАТЕЛЯ К ФОТО: {caption}"
         
         user_history[uid].append({"role": "user", "content": image_content})
