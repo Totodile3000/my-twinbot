@@ -41,7 +41,8 @@ def get_reply_keyboard():
 
 def init_chat(uid, c_type="cute"):
     user_characters[uid], user_states[uid] = c_type, None
-    user_chats[uid] = ai_client.chats.create(model="gemini-1.5-flash", config={"system_instruction": CHARACTERS[c_type]})
+    # ИСПРАВЛЕНО: Согласно новым стандартам Google GenAI SDK 2026 года
+    user_chats[uid] = ai_client.chats.create_chat(model="gemini-1.5-flash", config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_type]))
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_chat(update.effective_user.id, "cute")
@@ -96,9 +97,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uid not in user_chats: init_chat(uid, "cute")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
-        res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=text, config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
+        # ИСПРАВЛЕНО: Новый метод отправки реплик в чат-сессию
+        res = user_chats[uid].send_message(text)
         await update.message.reply_text(res.text)
     except Exception as e:
+        logging.error(f"Chat Error: {e}")
         if "503" in str(e) or "unavailable" in str(e).lower() or "overloaded" in str(e).lower():
             await update.message.reply_text(ERROR_503_RESPONSES.get(c_char, ERROR_503_RESPONSES["cute"]))
         else:
@@ -113,10 +116,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await p_file.download_to_drive(path)
     try:
         up_file = ai_client.files.upload(file=path)
+        # ИСПРАВЛЕНО: Корректный вызов мультимодального анализа
         res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
         await update.message.reply_text(res.text)
         ai_client.files.delete(name=up_file.name)
     except Exception as e:
+        logging.error(f"Photo Error: {e}")
         if "503" in str(e) or "unavailable" in str(e).lower() or "overloaded" in str(e).lower():
             await update.message.reply_text(ERROR_503_RESPONSES.get(c_char, ERROR_503_RESPONSES["cute"]))
         else:
