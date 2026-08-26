@@ -29,14 +29,14 @@ PROMPT_REQUESTS = {
 }
 
 def get_reply_keyboard():
-    return ReplyKeyboardMarkup([[KeyboardButton("🎨 Создать картинку")], [KeyboardButton("🎭 Сменить характер"), KeyboardButton("⚙️ Выбрать модель")], [KeyboardButton("ℹ️ Справка / Сброс")]], resize_keyboard=True)
+    return ReplyKeyboardMarkup([[KeyboardButton("🎨 Создать картинку")], [KeyboardButton("🎭 Сменить характер"), KeyboardButton("⚙️ Выбрать модель")], [KeyboardButton("ℹ️ О боте"), KeyboardButton("🧹 Сбросить чат")]], resize_keyboard=True)
 
-def init_chat(uid, c_type="cute", m_type="gemini-2.5-flash"):
+def init_chat(uid, c_type="cute", m_type="gemini-3.6-flash"):
     user_characters[uid], user_models[uid], user_states[uid] = c_type, m_type, None
     user_chats[uid] = ai_client.chats.create(model=m_type, config={"system_instruction": CHARACTERS[c_type]})
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    init_chat(update.effective_user.id, "cute", "gemini-2.5-flash")
+    init_chat(update.effective_user.id, "cute", "gemini-3.6-flash")
     await update.message.reply_text("Привет! Я твой личный супер-бот **TwinBot**! 🚀\n💬 Пиши вопросы\n📸 Шли фото бирок для анализа\n🎛 Всё управление на кнопках внизу!", parse_mode="Markdown", reply_markup=get_reply_keyboard())
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -45,13 +45,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if query.data.startswith("char_"):
-        c_type = query.data.split("_")[1]
-        init_chat(uid, c_type, user_models.get(uid, "gemini-2.5-flash"))
+        c_type = query.data.split("_")
+        init_chat(uid, c_type, user_models.get(uid, "gemini-3.6-flash"))
         names = {"cute": "Дружелюбного ассистента", "coder": "Крутого кодера", "pirate": "Старого пирата", "mentor": "Психолога-ментора", "snob": "Уставшего Сноба"}
         await query.message.edit_text(f"🎭 **Характер успешно изменен на {names[c_type]}!**\nЖду ваших сообщений! 🚀", parse_mode="Markdown")
         
     elif query.data.startswith("mod_"):
-        m_version = query.data.split("_")[1]
+        m_version = query.data.split("_")
         m_type = "gemini-2.5-flash" if m_version == "2.5" else "gemini-3.6-flash"
         init_chat(uid, user_characters.get(uid, "cute"), m_type)
         names = {"2.5": "Стабильную 2.5 Flash 🐎", "3.6": "Экспериментальную 3.6 Flash 🚀"}
@@ -60,9 +60,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def draw_logic(update: Update, prompt: str):
     await update.message.reply_chat_action(action="upload_photo")
     try:
-        # Надежное кодирование кириллицы и спецсимволов для URL
+        # Корректное кодирование и ПРАВИЛЬНЫЙ путь /prompt/ для Pollinations AI
         safe_prompt = urllib.parse.quote(prompt)
-        image_url = f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true"
+        image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&nologo=true"
         await update.message.reply_photo(photo=image_url, caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
     except Exception as e:
         await update.message.reply_text(f"Не удалось нарисовать: {e}")
@@ -71,7 +71,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text
     c_char = user_characters.get(uid, "cute")
-    c_model = user_models.get(uid, "gemini-2.5-flash")
+    c_model = user_models.get(uid, "gemini-3.6-flash")
     
     if text == "🎨 Создать картинку":
         user_states[uid] = "waiting_for_prompt"
@@ -83,11 +83,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "⚙️ Выбрать модель":
         await update.message.reply_text("⚙️ **Выбери ИИ-движок для работы:**", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🐎 Стабильная (Gemini 2.5)", callback_data="mod_2.5")], [InlineKeyboardButton("🚀 Экспериментальная (Gemini 3.6)", callback_data="mod_3.6")]]))
         return
-    elif text == "ℹ️ Справка / Сброс":
+    elif text == "ℹ️ О боте":
+        char_names = {"cute": "Дружелюбный друг", "coder": "Крутой кодер", "pirate": "Старый пират", "mentor": "Психолог-ментор", "snob": "Уставший Сноб"}
+        mod_names = {"gemini-2.5-flash": "Gemini 2.5 Flash 🐎", "gemini-3.6-flash": "Gemini 3.6 Flash 🚀"}
+        await update.message.reply_text(f"ℹ️ **Параметры TwinBot:**\n● **Роль:** {char_names.get(c_char, 'Дружелюбный')}\n● **Движок ИИ:** {mod_names.get(c_model, 'Gemini 3.6')}\n● **Генерация артов:** Бесплатная сеть Pollinations AI", parse_mode="Markdown")
+        return
+    elif text == "🧹 Сбросить чат":
         init_chat(uid, c_char, c_model)
-        c_names = {"cute": "Дружелюбный друг", "coder": "Крутой кодер", "pirate": "Старый пират", "mentor": "Психолог-ментор", "snob": "Уставший Сноб"}
-        m_names = {"gemini-2.5-flash": "Gemini 2.5 Flash 🐎", "gemini-3.6-flash": "Gemini 3.6 Flash 🚀"}
-        await update.message.reply_text(f"ℹ️ **TwinBot:**\n● **Роль:** {c_names.get(c_char)}\n● **Движок:** {m_names.get(c_model)}\n🧹 *Память чата очищена!*", parse_mode="Markdown")
+        await update.message.reply_text("🧹 **Память текущего диалога очищена!**")
         return
 
     if user_states.get(uid) == "waiting_for_prompt":
@@ -95,8 +98,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await draw_logic(update, text)
         return
 
-    if uid not in user_chats: init_chat(uid, "cute", "gemini-2.5-flash")
-    await update.message.reply_chat_action(action="typing")
+    if uid not in user_chats: init_chat(uid, "cute", "gemini-3.6-flash")
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
         res = user_chats[uid].send_message(text)
         await update.message.reply_text(res.text)
@@ -111,7 +114,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await p_file.download_to_drive(path)
     try:
         up_file = ai_client.files.upload(file=path)
-        res = ai_client.models.generate_content(model=user_models.get(uid, "gemini-2.5-flash"), contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[user_characters.get(uid, "cute")].strip()))
+        res = ai_client.models.generate_content(model=user_models.get(uid, "gemini-3.6-flash"), contents=[up_file, update.message.caption or "Проанализируй это изображение."], config=types.GenerateContentConfig(system_instruction=CHARACTERS[user_characters.get(uid, "cute")].strip()))
         await update.message.reply_text(res.text)
         ai_client.files.delete(name=up_file.name)
     except Exception as e:
@@ -129,3 +132,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
