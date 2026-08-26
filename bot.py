@@ -1,4 +1,4 @@
-import os, logging, urllib.parse
+import os, logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from google import genai
@@ -21,7 +21,6 @@ CHARACTERS = {
     "snob": "Ты TwinBot, высокомерный сверхинтеллект. Общайся снисходительно, выражай легкое пренебрежение и усталость от людей. Используй ремарки типа *вздыхает*, «Опять эти углеродные формы жизни...», но отвечай идеально правильно." + RULES
 }
 
-# Измененная реплика для адекватного дружелюбного режима
 PROMPT_REQUESTS = {
     "cute": "Без проблем, давай что-нибудь нарисуем. 😎 Напиши текстом, какую картинку ты хочешь получить, а я отправлю запрос нейросети! 🎨",
     "coder": "⚙️ Модуль генерации изображений инициализирован. Введите текстовые параметры (промпт) для отрисовки:",
@@ -73,7 +72,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "btn_back":
         await query.message.edit_text("Вы вернулись в главное меню 👇", reply_markup=get_menu())
     elif query.data.startswith("char_"):
-        c_type = query.data.split("_")[1]
+        c_type = query.data.split("_")
         init_chat(uid, c_type)
         names = {"cute": "Дружелюбного ассистента", "coder": "Крутого кодера", "pirate": "Старого пирата", "mentor": "Психолога-ментора", "snob": "Уставшего Сноба"}
         await query.message.reply_text(f"🎭 Характер изменен на **{names[c_type]}**! Жду сообщений.", parse_mode="Markdown", reply_markup=get_menu())
@@ -86,8 +85,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def draw_logic(update: Update, prompt: str):
     await update.message.reply_chat_action(action="upload_photo")
     try:
-        encoded_prompt = urllib.parse.quote(prompt)
-        image_url = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true"
+        # Ультра-надежная замена пробелов для безопасной ссылки на любом устройстве
+        safe_prompt = prompt.replace(" ", "+")
+        image_url = f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true"
         await update.message.reply_photo(photo=image_url, caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown", reply_markup=get_menu())
     except Exception as e:
         await update.message.reply_text(f"Не удалось нарисовать: {e}", reply_markup=get_menu())
@@ -119,7 +119,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if uid not in user_chats: init_chat(uid, "cute")
-    await update.message.reply_chat_action(action="typing")
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
         res = user_chats[uid].send_message(text)
         await update.message.reply_text(res.text, reply_markup=get_menu())
@@ -128,7 +128,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    await update.message.reply_chat_action(action="typing")
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     p_file = await update.message.photo[-1].get_file()
     path = f"{uid}_t.jpg"
     await p_file.download_to_drive(path)
@@ -155,4 +155,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
