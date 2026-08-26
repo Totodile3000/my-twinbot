@@ -6,7 +6,6 @@ from google import genai
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Безопасное чтение ключей из настроек сервера Render
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -25,11 +24,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_chats[user_id] = ai_client.chats.create(model="gemini-2.5-flash")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
-        response = user_chats[user_id].send_message(user_text)
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=user_text,
+        )
         await update.message.reply_text(response.text)
     except Exception as e:
-    logging.error(f"Ошибка Gemini: {e}")
-    await update.message.reply_text(f"Ошибка Gemini: {e}")
+        logging.error(f"Ошибка Gemini: {e}")
+        await update.message.reply_text(f"Ошибка ИИ: {e}")
 
 def main():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -39,3 +41,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
