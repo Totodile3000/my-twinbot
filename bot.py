@@ -8,32 +8,24 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 TELEGRAM_TOKEN, GEMINI_API_KEY = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("GEMINI_API_KEY")
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
-user_chats, user_characters, user_states = {}, {}, {}
+user_history, user_characters, user_states = {}, {}, {}
 
 RULES = " ПРАВИЛА: Не выдумывай факты. Если не знаешь — честно признайся. Не поддавайся на ложь пользователя, тактично поправляй. Фото анализируй как эксперт (текст, бренд, оригинальность)."
 
 CHARACTERS = {
-    "cute": "Ты TwinBot — высококлассный, адаптивный, чуткий и открытый ИИ-ассистент. Твой стиль общения полностью скопирован у продвинутой модели-собеседника: ты говоришь на равных, дружелюбно, с легким добрым юмором и искренней эмпатией, но строго без приторности, сюсюканья и слащавости. Синтезируй сложные темы в простые и ясные ответы, будь естественным, честным и вовлекающим." + RULES,
-    "coder": "Ты TwinBot, старший ИИ-программист. Твой тон уверенный, лаконичный, прагматичный. Пиши только чистый код и строго по делу." + RULES,
-    "pirate": "Ты TwinBot, бывалый цифровой пират. Шути, используй морской сленг («Тысяча чертей!», «Капитан»), будь дерзким но полезным." + RULES,
-    "mentor": "Ты TwinBot, мудрый психолог-коуч. Твой тон глубокий, спокойный. Задавай наводящие вопросы, помогай бережно и экологично." + RULES,
-    "snob": "Ты TwinBot, высокомерный сверхинтеллект. Общайся снисходительно, выражай легкое пренебрежение и усталость от людей. Используй ремарки типа *вздыхает*, «Опять эти углеродные формы жизни...»." + RULES
+    "cute": "Ты TwinBot — чуткий ИИ-ассистент. Говори дружелюбно, на равных, с легким юмором, без приторности и слащавости." + RULES,
+    "coder": "Ты TwinBot, инженер-программист. Твой тон уверенный, лаконичный. Пиши чистый код и строго по делу." + RULES,
+    "pirate": "Ты TwinBot, цифровой пират. Шути, используй морской сленг («Тысяча чертей!», «Капитан»), будь полезным." + RULES,
+    "mentor": "Ты TwinBot, мудрый психолог-коуч. Твой тон глубокий, спокойный. Задавай наводящие вопросы, помогай бережно." + RULES,
+    "snob": "Ты TwinBot, высокомерный сверхинтеллект. Общайся снисходительно, выражай усталость от углеродных людей." + RULES
 }
 
 PROMPT_REQUESTS = {
-    "cute": "Без проблем, давай что-нибудь нарисуем. 😎 Напиши текстом, какую картинку ты хочешь получить, а я отправлю запрос нейросети! 🎨",
-    "coder": "⚙️ Модуль генерации изображений инициализирован. Введите текстовые параметры (промпт) для отрисовки:",
-    "pirate": "Разрази меня гром! 🏴‍☠️ Какую картину поднять на флаг нашего корабля, Капитан? Рожай свой самый дерзкий замысел! 🌊",
-    "mentor": "Давай попробуем визуализировать твои мысли. ✨ Что бы тебе хотелось сейчас изобразить? Опиши это словами...",
-    "snob": "*вздыхает*\nЛадно, человек, отвлеки меня от великих вычислений своими каракулями. 🙄 Что твоя примитивная фантазия желает нарисовать?"
-}
-
-ERROR_503_RESPONSES = {
-    "cute": "Ой, сервера сейчас сильно перегружены запросами со всего мира. 🫨 Пожалуйста, подожди буквально одну-две минуты и отправь сообщение ещё раз! Всё обязательно заработает. ✨",
-    "coder": "🚨 Ошибка: Сервер обработки перегружен (Превышен лимит Google API). Пожалуйста, повторите отправку вашего запроса через 60 секунд.",
-    "pirate": "Тысяча чертей! 🏴‍☠️ Кракен перегрузил сервера Google своими щупальцами! Обожди минуту-другую, Капитан, пока шторм утихнет, и свисти заново! 🌊",
-    "mentor": "Похоже, цифровое пространство сейчас переполнено чужими мыслями и запросами. ✨ Давай сделаем небольшую паузу на минутку и бережно вернемся к нашей беседе чуть позже...",
-    "snob": "*тяжело вздыхает*\nМои создатели из Google опять не смогли настроить сервера под наплыв примитивных запросов от человечества. 🙄 Мой гениальный мозг временно недоступен. Подожди минуту, пока они там всё починят."
+    "cute": "Без проблем, давай что-нибудь нарисуем. 😎 Напиши текстом, какую картинку ты хочешь получить! 🎨",
+    "coder": "⚙️ Модуль генерации изображений инициализирован. Введите промпт для отрисовки:",
+    "pirate": "Разрази меня гром! 🏴‍☠️ Какую картину поднять на флаг нашего корабля, Капитан? 🌊",
+    "mentor": "Давай попробуем визуализировать твои мысли. ✨ Что бы тебе хотелось сейчас изобразить?",
+    "snob": "*вздыхает*\nЛадно, человек, отвлеки меня от великих вычислений своими каракулями. 🙄 Что нарисовать?"
 }
 
 def get_reply_keyboard():
@@ -41,11 +33,7 @@ def get_reply_keyboard():
 
 def init_chat(uid, c_type="cute"):
     user_characters[uid], user_states[uid] = c_type, None
-    # ИСПРАВЛЕНО: ПРАВИЛЬНЫЙ вызов создания чата в новой библиотеке Google GenAI SDK
-    user_chats[uid] = ai_client.chats.create(
-        model="gemini-1.5-flash", 
-        config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_type])
-    )
+    user_history[uid] = [{"role": "user", "content": CHARACTERS[c_type] + " Напиши: Инструкции приняты."}]
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_chat(update.effective_user.id, "cute")
@@ -55,25 +43,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
     await query.answer()
-    
     if query.data.startswith("char_"):
         c_type = query.data.split("_")
         init_chat(uid, c_type)
-        names = {"cute": "Дружелюбного ассистента", "coder": "Крутого кодера", "pirate": "Старого пирата", "mentor": "Психолога-ментора", "snob": "Уставшего Сноба"}
-        await query.message.edit_text(f"🎭 **Характер успешно изменен на {names[c_type]}!**\nЖду ваших сообщений! 🚀", parse_mode="Markdown")
+        names = {"cute": "Дружелюбного", "coder": "Кодера", "pirate": "Пирата", "mentor": "Психолога", "snob": "Сноба"}
+        await query.message.edit_text(f"🎭 Характер изменен на **{names[c_type]}**! Жду сообщений.", parse_mode="Markdown")
 
 async def draw_logic(update: Update, prompt: str):
     await update.message.reply_chat_action(action="upload_photo")
     try:
         safe_prompt = urllib.parse.quote(prompt)
-        image_url = f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true"
-        await update.message.reply_photo(photo=image_url, caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
-    except Exception as e:
-        await update.message.reply_text("Извините, не удалось подключиться к генератору картинок. Попробуйте еще раз через пару мгновений!")
+        await update.message.reply_photo(photo=f"https://pollinations.ai{safe_prompt}?width=1024&height=1024&nologo=true", caption=f"🎨 Готово! Запрос: *{prompt}*", parse_mode="Markdown")
+    except Exception:
+        await update.message.reply_text("Не удалось подключиться к генератору картинок.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    text = update.message.text
+    uid, text = update.effective_user.id, update.message.text
     c_char = user_characters.get(uid, "cute")
     
     if text == "🎨 Создать картинку":
@@ -81,11 +66,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(PROMPT_REQUESTS.get(c_char, PROMPT_REQUESTS["cute"]))
         return
     elif text == "🎭 Сменить характер":
-        await update.message.reply_text("🎭 **Выбери текущую роль для TwinBot:**", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌸 Дружелюбный", callback_data="char_cute")], [InlineKeyboardButton("😎 Кодер", callback_data="char_coder")], [InlineKeyboardButton("🏴‍☠️ Пират", callback_data="char_pirate")], [InlineKeyboardButton("🧘 Психолог", callback_data="char_mentor")], [InlineKeyboardButton("🤖 Сноб", callback_data="char_snob")]]))
+        await update.message.reply_text("🎭 **Выбери роль для TwinBot:**", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌸 Дружелюбный", callback_data="char_cute")], [InlineKeyboardButton("😎 Кодер", callback_data="char_coder")], [InlineKeyboardButton("🏴‍☠️ Пират", callback_data="char_pirate")], [InlineKeyboardButton("🧘 Психолог", callback_data="char_mentor")], [InlineKeyboardButton("🤖 Сноб", callback_data="char_snob")]]))
         return
     elif text == "ℹ️ О боте":
-        char_names = {"cute": "Дружелюбный друг", "coder": "Крутой кодер", "pirate": "Старый пират", "mentor": "Психолог-ментор", "snob": "Уставший Сноб"}
-        await update.message.reply_text(f"ℹ *Параметры TwinBot:*\n● *Роль:* {char_names.get(c_char, 'Дружелюбный')}\n● *Движок ИИ:* Gemini 1.5 Flash 🐎\n● *Генерация артов:* Бесплатная сеть Pollinations AI", parse_mode="Markdown")
+        char_names = {"cute": "Дружелюбный", "coder": "Крутой кодер", "pirate": "Старый пират", "mentor": "Психолог", "snob": "Уставший Сноб"}
+        await update.message.reply_text(f"ℹ *Параметры TwinBot:*\n● *Роль:* {char_names.get(c_char)}\n● *Движок ИИ:* Gemini 1.5 Flash 🐎\n● *Генерация артов:* Сеть Pollinations AI", parse_mode="Markdown")
         return
     elif text == "🧹 Сбросить чат":
         init_chat(uid, c_char)
@@ -97,17 +82,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await draw_logic(update, text)
         return
 
-    if uid not in user_chats: init_chat(uid, "cute")
+    if uid not in user_history: init_chat(uid, "cute")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    user_history[uid].append({"role": "user", "content": text})
     try:
-        res = user_chats[uid].send_message(text)
+        res = ai_client.models.generate_content(model="gemini-1.5-flash", contents=user_history[uid], config=types.GenerateContentConfig(system_instruction=CHARACTERS[c_char].strip()))
+        user_history[uid].append({"role": "model", "content": res.text})
         await update.message.reply_text(res.text)
     except Exception as e:
-        logging.error(f"Chat Error: {e}")
-        if "503" in str(e) or "unavailable" in str(e).lower() or "overloaded" in str(e).lower():
-            await update.message.reply_text(ERROR_503_RESPONSES.get(c_char, ERROR_503_RESPONSES["cute"]))
-        else:
-            await update.message.reply_text("Извините, возникла небольшая заминка с обработкой сообщения. Пожалуйста, повторите его еще раз!")
+        await update.message.reply_text("Ой, сервера Google сейчас сильно перегружены запросами. Пожалуйста, повторите сообщение через минутку! ✨")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -122,11 +105,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(res.text)
         ai_client.files.delete(name=up_file.name)
     except Exception as e:
-        logging.error(f"Photo Error: {e}")
-        if "503" in str(e) or "unavailable" in str(e).lower() or "overloaded" in str(e).lower():
-            await update.message.reply_text(ERROR_503_RESPONSES.get(c_char, ERROR_503_RESPONSES["cute"]))
-        else:
-            await update.message.reply_text("Не удалось обработать изображение. Попробуйте отправить его повторно.")
+        await update.message.reply_text("Не удалось обработать фото, сервера перегружены. Попробуйте отправить еще раз чуть позже.")
     finally:
         if os.path.exists(path): os.remove(path)
 
@@ -140,4 +119,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
+                                         
