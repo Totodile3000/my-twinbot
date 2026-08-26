@@ -26,9 +26,9 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
-MAX_HISTORY_MESSAGES = 20
+MAX_HISTORY_MESSAGES = 10
 MAX_MESSAGE_LENGTH = 12000
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 
 logging.basicConfig(
     level=logging.INFO,
